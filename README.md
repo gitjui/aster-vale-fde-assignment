@@ -1,9 +1,5 @@
 # Aster Vale transcript labeling (policy assignment-v2)
 
-**Submitted:** `predictions.jsonl` (all 50 calls, model `qwen/qwen3.8-27b`). Score on the 15 held-out calls: 64.7/70 (80% exact
-match); on all 50: 62.8/70 (72% exact). Details, iterations, failure patterns and cost are in `ERROR_ANALYSIS.md`.
-Do not submit `.env` (it holds the API key) or `results/` (local caches and logs).
-
 ## Run (one command)
 ```
 export GROQ_API_KEY=...            # or put GROQ_API_KEY=... in a local .env; never commit it
