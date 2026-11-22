@@ -1,0 +1,51 @@
+transcript_id,agent_gender,agent_p_male,agent_top_evidence,customer_gender,customer_p_male,customer_top_evidence,rules_agent_gender,rules_customer_gender
+AVT-001,male,0.987,<to> regularly we won't be able to come tomorrow because it's sunday and we have to go somewhere,female,0.0,<to> yes ma'am yes ma'am,male,female
+AVT-002,male,0.999,<to> yes sir,male,1.0,<to> hi sir i am mehul speaking from aster vale care,male,male
+AVT-003,female,0.0,<to> greetings ma'am,male,1.0,<to> yes sir greetings tell me i am tara speaking from aster vale care,unknown,male
+AVT-004,female,0.0,<to> okay ma'am okay,male,1.0,<to> sir no see it's a natural process,female,male
+AVT-005,male,0.999,<to> the hillgate one has already rejected so how will it be done now sir ?,male,1.0,<to> okay sir,male,male
+AVT-006,male,0.998,<to> i went to a physiotherapist he also said that there's some gap in the knee,male,1.0,<to> sir one shouldn't eat that many medicines if you take too many medicines it impacts your kidneys as well,male,male
+AVT-007,female,0.0,<to> rfa,unknown,0.667,<to> rfa,female,male
+AVT-008,male,0.999,<to> do it the day after tomorrow sir the day after tomorrow on the 14 th or 15 th,unknown,0.303,<to> but if ma'am has had tears twice without any heavy activity or falling there must be some other reason that needs t,male,male
+AVT-009,male,0.999,<to> yes go ahead,male,1.0,<to> yes sir he'll be available in the afternoon his ot is in the morning,male,male
+AVT-010,female,0.0,<to> what kind of rule is this ma'am ? this is like bullshit what you're saying is bullshit i don't understand it is thi,female,0.0,<to> no ma'am,female,female
+AVT-011,female,0.0,<to> nisha ma'am okay,female,0.0,<to> okay ma'am,female,female
+AVT-012,male,0.999,<to> mehul sir i wanted to discuss the treatment for my father,male,1.0,<to> sir there's noise in your background i can't hear you,male,male
+AVT-013,female,0.0,<to> it's a gap issue ma'am,male,1.0,<to> sir i am speaking from the doctors team at aster vale pain clinic you have made an inquiry regarding knee pain,female,male
+AVT-014,male,0.999,<to> i don't want to be treated by a junior doctor i want to meet only the senior doctor,male,1.0,<to> hi bhaskar sir very good afternoon i am pranav from aster vale care,male,male
+AVT-015,male,0.999,<to> sir how much is it ?,male,1.0,<to> can you hear me sir ?,male,male
+AVT-016,male,0.991,<to> hello sir i am meera speaking your phone was cut,female,0.0,<to> ma'am do you have any health insurance ?,male,female
+AVT-017,female,0.0,<to> no ma'am i am going out right now i'll come after one week,male,1.0,<to> so sir can i ask you arin ji where exactly is the pain ?,female,male
+AVT-018,male,0.996,<to> so i just want to understand what procedure you are following to get it treated without surgery that's why i called,male,1.0,<to> hello hi sir very good evening my name is kiran i'm calling from aster vale care how can i help you please ?,unknown,male
+AVT-019,male,0.999,<to> sure thank you sir,male,1.0,<to> okay okay sir i will share it you can let me know,male,male
+AVT-020,male,0.999,<to> okay sir okay fine what's your good name ?,male,1.0,<to> it's the same timing sir same timing,male,male
+AVT-021,female,0.0,<to> her age ma'am is 75,female,0.0,<to> yes ma'am,female,female
+AVT-022,female,0.001,<to> no not right now,male,1.0,<to> sir i am saira speaking from aster vale care we had a talk about your back pain you are calling from reedgate right,female,male
+AVT-023,female,0.0,<to> and ma'am what is acupuncture ? magnetic acupuncture,female,0.0,<to> okay thank you ma'am,female,female
+AVT-024,female,0.0,<to> okay ma'am,male,1.0,<to> second thing sir if there's any severity then we also have some such advanced procedures which you can get treated ,female,male
+AVT-025,female,0.0,<to> no ma'am actually i only come here for work it's been a year but i don't know much about the nearby locations but m,female,0.0,<to> ma'am where are you speaking from ? specifically from pineford ?,female,female
+AVT-026,male,0.994,<to> consider it to be two to three years,female,0.0,<to> no ma'am it's not steroids we make the medicine from the patient's blood only by taking platelets we don't use ster,male,female
+AVT-027,male,0.999,<to> what i used to tell her is let's go once get it checked and then see how we go about that,male,1.0,<to> hi sir hi good afternoon i am riaan from aster vale pain clinic how can i help you ?,male,male
+AVT-028,female,0.0,<to> yes ma'am i just saw your ad,female,0.0,<to> hello ma'am,female,female
+AVT-029,male,0.999,<to> elmfield is okay for me pineford is a bit far and what else is there ? i would have to go from there and then take ,male,1.0,<to> sir there are no online appointments because you have to come through me and walk ins are also not allowed for chro,male,male
+AVT-030,female,0.001,<to> i'm fifty,female,0.0,<to> thank you ma'am have a good day take care,female,female
+AVT-031,female,0.0,<to> okay ma'am thank you,male,1.0,<to> yes what is your age sir ?,female,male
+AVT-032,male,0.999,<to> no no sir i understand but my point is that you must know that if you meet a doctor suppose the doctor advised you ,male,1.0,<to> alright sir,male,male
+AVT-033,male,0.998,<to> the thing is spending a thousand rupees then having to leave and come back what else can one do ?,male,1.0,<to> sir i'm calling from pineford hospital from dr leena rao's team we had received your request for you know your pain,unknown,male
+AVT-034,male,0.998,<to> how many times will we have to come to your clinic ?,male,1.0,<to> sir it lasts for years for some patients the treatment lasts for 10 years 15 years or even 1 year or 2 years everyo,male,male
+AVT-035,male,0.999,<to> the spine sir,male,1.0,<to> hello sir,male,male
+AVT-036,male,0.998,<to> it's not an early stage sir i'm telling you it's critical,female,0.0,<to> okay ma'am okay,male,female
+AVT-037,male,0.997,<to> sir are you speaking from the cedar square branch ?,female,0.0,<to> hello hi ma'am this is sagar speaking from aster vale care,male,female
+AVT-038,male,0.999,<to> okay sir okay you understood my problem right ? when the urine is controlled it's a big thing or if it comes once e,male,1.0,<to> okay sir,male,male
+AVT-039,female,0.0,<to> yeah definitely ma'am,male,1.0,<to> does the pain travel from your waist to your legs now ?,female,male
+AVT-040,female,0.0,<to> is this your number ma'am ?,male,1.0,<to> yes sir this is my number,female,male
+AVT-041,unknown,0.663,<to> right,male,1.0,<to> no sir it's not a congested area it's ahead of linden park south aruna is quite a posh area,unknown,male
+AVT-042,male,0.999,<to> that's what i'm asking what do you provide ? ayurvedic homeopathic or some therapy ? you'll have to tell me that,male,1.0,<to> sir at aster vale we treat pain conditions without surgery whether the pain is related to bones nerves or muscles o,male,male
+AVT-043,male,0.996,<to> yes sir,female,0.0,<to> hi leela ma'am i am mehul calling from aster vale pain clinic,male,female
+AVT-044,male,0.998,<to> like in the morning when i have to go to the washroom,male,1.0,<to> hi sir i am speaking from aster vale care we received a missed call from you,unknown,male
+AVT-045,male,0.985,<to> okay meaning if you confirm that part then i can visit,male,1.0,<to> sir only the treatment,unknown,male
+AVT-046,unknown,0.642,<to> i'm calling from near willow garden,female,0.0,<to> sorry ma'am your voice is breaking,unknown,female
+AVT-047,male,0.999,<to> well sir i'll try my best to reach the alder college near your aster vale care,male,1.0,<to> sir it won't make sense i could arrange a consultation for you but it's better to consult in one place where you ge,male,male
+AVT-048,male,0.999,<to> alright alright what is your name sir ?,male,1.0,<to> okay sir,male,male
+AVT-049,male,0.999,<to> give me two or three days what day is it today sir ?,male,1.0,<to> i'm saying that it might be a possibility you'll have to run some tests again mri x ray to be clear of the situatio,male,male
+AVT-050,female,0.0,<to> sure okay ma'am thank you take care bye,male,1.0,<to> sir that's also to end the pain from the outside because it's for external strengthening,female,male
