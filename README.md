@@ -1,80 +1,527 @@
-# Aster Vale transcript labeling (policy assignment-v2)
+# Aster Vale — Transcript Labeling & Speaker Gender Classification
 
-## Run (one command)
+## Overview
+
+Aster Vale processes customer consultation transcripts and produces structured call labels using an LLM-based extraction pipeline and deterministic Python business logic.
+
+The project has two components:
+
+1. **Transcript labeling:** Extracts customer intent, lead quality, blockers, call outcomes and follow-up dates from conversations.
+2. **Speaker gender classification:** Uses a BiLSTM neural network to classify the clinic agent and customer in each call, without transformers or pretrained models.
+
+---
+
+# Part 1: Transcript Labeling
+
+## 1. Running the pipeline
+
+### Requirements
+- Python 3.9+
+- Groq API key
+- `requests==2.32.5`
+
+Set your API key:
+
+```bash
+export GROQ_API_KEY=...
 ```
-export GROQ_API_KEY=...            # or put GROQ_API_KEY=... in a local .env; never commit it
-python run.py INPUT.jsonl OUTPUT.jsonl            # add --trace trace.jsonl to keep intermediate extractions
+
+Alternatively, add `GROQ_API_KEY` to a local `.env` file. Never commit credentials.
+
+Run the pipeline:
+
+```bash
+python run.py INPUT.jsonl OUTPUT.jsonl
 ```
-Input rows: `transcript_id, call_started_at, timezone, transcript` (only these are used). Output rows: exactly
-`transcript_id, disposition, sub_disposition, lead_quality, next_call_at` (`null` is real JSON null; timestamps `...+05:30`).
 
-Resume / free-tier friendly options: `--cache DIR` stores each record's extraction (keyed by model + settings + prompt + input) so an
-interrupted run resumes without re-paying tokens; `--max-seconds N` stops starting new records after N s (exit code 3, no output written
-until every record is done); `--strict` raises instead of writing a fallback row. `--workers` (default 4) sets parallelism.
+To retain intermediate LLM extractions for debugging:
 
-Reproduce the local evaluation on the 50 labeled calls:
+```bash
+python run.py INPUT.jsonl OUTPUT.jsonl --trace trace.jsonl
 ```
-python prepare_data.py "<50 Labeled Calls>.csv" data/     # writes data/inputs.jsonl (input fields only) + data/gold.jsonl
-ASTER_MODEL=qwen/qwen3.8-27b python run.py data/inputs.jsonl results/pred.jsonl --trace results/trace.jsonl --cache results/cache
-python eval.py results/pred.jsonl data/gold.jsonl                         # all 50
-python eval.py results/pred.jsonl data/gold.jsonl data/val_ids.txt        # 15 held-out validation calls only
-python eval.py results/pred.jsonl data/gold.jsonl data/val_ids.txt --exclude   # 35 tuning calls only
-python -m pytest -q tests                                  # 29 offline tests, no API key needed
+
+### Input format
+
+Each JSONL row contains:
+
+| Field | Description |
+|---|---|
+| `transcript_id` | Unique call identifier |
+| `call_started_at` | Call start timestamp |
+| `timezone` | Local timezone |
+| `transcript` | Full conversation transcript |
+
+Only these four input fields are used.
+
+### Output format
+
+Each output row contains exactly five fields:
+
+```text
+transcript_id
+disposition
+sub_disposition
+lead_quality
+next_call_at
 ```
-`data/val_ids.txt` = IDs ending in 3, 6 or 9 (15 calls), fixed before tuning; they are the held-out validation split.
 
-## Design
-One LLM extraction call per transcript, then deterministic Python (`combine.py`) produces the four labels.
-* `prompts.SYSTEM` asks only evidence questions: is there a pain need / meaningful dialogue, invalidity flags, final refusal or
-  do-not-contact, was a consultation day AND time mutually confirmed (+online / replacement), the final primary blocker(s), info review,
-  curiosity / >30-day deferral, the final acknowledged callback (day/time words copied into a structure, never computed), and whether the
-  customer explicitly postponed. `prompts.to_combine_inputs` maps that JSON to the combiner's inputs.
-* `combine.py`: outcome precedence (D6), valid parent/child pairs, blocker and invalid-reason tie-breaks, lead-quality order (LQ), all
-  next_call_at arithmetic (F1-F12: relative days, weekdays, this/next week, month/day inference, default 11:00, hour 1-7 = PM, dayparts,
-  past-time rejection, +3 vague fallback, +1 other fallback, suppression), and schema validation.
-* No gold labels, IDs, hashes or per-record logic are used at inference. No few-shot examples are embedded (token budget).
-* Iteration history: v1 = two LLM passes (`prompts_v1_two_pass.py`), replaced because it cost ~7.7k tokens/call and could not complete
-  on the Groq free tier (200k tokens/day/model); v2 = single pass (~3.8k tokens/call); v3 = v2 + wording fixes from the error analysis.
-  See ERROR_ANALYSIS.md.
+- Missing callback timestamps are represented by JSON `null`.
+- Timestamps include their UTC offset (e.g. `...+05:30`).
 
-## Settings (recorded for the submitted results)
-* Provider: Groq (OpenAI-compatible REST). Final model ID: `qwen/qwen3.8-27b` (set via `ASTER_MODEL`; the code default is listed in
-  `llm.py`). Also evaluated: `openai/gpt-oss-120b`, `openai/gpt-oss-20b`.
-* temperature 0, top_p 1, seed 7, max_tokens 4000, `response_format={"type":"json_object"}`; Qwen: `reasoning_format="hidden"`;
-  gpt-oss: `reasoning_effort="low"` (env `ASTER_REASONING_EFFORT`).
-* Timeout 90 s per HTTP call; up to 6 attempts; honours `retry-after` on 429/5xx, else exponential backoff; JSON parsed with
-  fence-stripping and `{...}` salvage.
-* If a record still fails after retries, a conservative valid default row is written (Follow-up Required / Further Discussion / Medium /
-  next day 11:00) with a warning; `--strict` raises instead.
-* Dependencies: Python 3.9+ (tested 3.13.9), `requests==2.32.5`; `pytest==8.4.2` for tests.
-* Free-tier limits observed (per model, per organisation): 8k tokens/min (Qwen: 7k input tokens/min), 1000 requests/day,
-  200k tokens/day. One full 50-call run is ~190k tokens, so expect ~25 min when the daily quota is fresh.
+## 2. System architecture
 
-## Task 2: speaker gender with a BiLSTM (no transformer)
-`gender_bilstm.py` labels the gender of BOTH speakers in each call (the clinic agent and the customer) with a neural sequence
-model built from scratch in PyTorch: a hierarchical **BiLSTM with attention**. No transformer, no pretrained model, no API.
+The pipeline uses **one LLM extraction call per transcript**, followed by deterministic Python processing to generate the four final labels.
 
+The design separates language understanding from business-rule execution.
+
+### Processing flow
+
+```text
+Customer Call Transcript
+          |
+          v
+    prompts.SYSTEM
+          |
+          v
+   Single LLM Call
+          |
+          v
+ Structured JSON Extraction
+          |
+          v
+prompts.to_combine_inputs
+          |
+          v
+      combine.py
+          |
+          v
+   Business Rule Engine
+          |
+          v
+Schema Validation
+          |
+          v
+ Four Final Labels
 ```
-python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
-.venv/bin/python gender_bilstm.py cv                       # 5-fold cross-validation, grouped by call (~10 min on CPU)
-.venv/bin/python gender_bilstm.py train                    # trains on all labeled speakers -> models/gender_bilstm.pt (~3 min)
-.venv/bin/python gender_bilstm.py predict data/inputs.jsonl data/gender_bilstm_predictions.jsonl
+
+### A. LLM extraction — `prompts.SYSTEM`
+
+The LLM identifies evidence from the conversation rather than directly deciding the final business outcome.
+
+It extracts:
+
+- Whether the customer expresses a genuine need or engages in meaningful dialogue.
+- Invalidity flags and reasons.
+- Final refusal or explicit do-not-contact requests.
+- Whether a consultation day AND time were mutually confirmed, including online or replacement arrangements.
+- Final primary blocker(s).
+- Whether the customer needs to review information.
+- Curiosity or deferral beyond 30 days.
+- The final mutually acknowledged callback request.
+- Whether the customer explicitly postponed.
+
+**Important:** Callback dates and times are extracted as spoken. For example, "next Monday at 4 PM" is captured as day and time text. The LLM does not calculate the calendar date.
+
+### B. Input mapping — `prompts.to_combine_inputs`
+
+Maps the LLM's structured JSON extraction into the input format expected by `combine.py`.
+
+This keeps extraction and business-rule processing separate.
+
+### C. Deterministic processing — `combine.py`
+
+Python applies the business rules and produces the final four labels.
+
+Its responsibilities include:
+
+| Rule group | Responsibility |
+|---|---|
+| D6 | Outcome precedence when multiple conditions apply |
+| Parent/child validation | Ensures valid disposition and sub-disposition combinations |
+| Blocker tie-breaks | Selects the final primary blocker |
+| Invalid-reason tie-breaks | Resolves competing invalidity reasons |
+| LQ | Applies the lead-quality hierarchy |
+| F1–F12 | Calculates `next_call_at` |
+| Schema validation | Validates the final structured output |
+
+Callback calculation rules (F1–F12) cover:
+
+- Relative dates and days.
+- Weekday interpretation.
+- This week / next week.
+- Month and day inference.
+- Default callback time of 11:00.
+- Interpreting hours 1–7 as PM.
+- Daypart interpretation.
+- Rejection of past callback times.
+- Three-day fallback for vague requests.
+- One-day fallback for other unspecified cases.
+- Callback suppression under applicable conditions.
+
+### Design decisions
+
+- No gold labels, IDs, hashes or per-record logic are used during inference.
+- No few-shot examples are embedded in the prompt, keeping token consumption lower.
+- LLM extraction is limited to understanding conversation evidence.
+- Business decisions and date arithmetic are handled through deterministic Python rules.
+
+This makes the system easier to debug: extraction errors can be distinguished from business-rule errors.
+
+## 3. Evaluation and reproducibility
+
+The local evaluation uses 50 manually labelled calls.
+
+### Prepare the dataset
+
+```bash
+python prepare_data.py "<50 Labeled Calls>.csv" data/
 ```
-* **Example** = one (call, speaker) pair. Input = every line of the call, each tagged `<by>` (said by that speaker, e.g. "I am
-  Mehul", "my wife") or `<to>` (said to them, e.g. "ma'am", "Thank you, Mr. Kiran"), plus a role token.
-* **Model**: word embeddings (64) -> BiLSTM (64 per direction) over each line -> max-pool -> additive attention over the lines ->
-  linear -> male/female. Trained with Adam (lr 2e-3), 25 epochs, dropout 0.3, random line-dropout augmentation; an ensemble of 3
-  seeds (7, 8, 9) whose probabilities are averaged. Output is `unknown` when the top probability is below 0.75. The most-attended
-  lines are returned as evidence.
-* **Labels**: there is no supplied gender ground truth. `data/gender_reference.jsonl` holds hand labels written by reading each
-  transcript (92 usable speakers: 49 customers + 43 agents; 7 undecidable agents and the two-customer call AVT-008 are excluded).
-* **Cross-validated result** (5 folds grouped by call, so a call is never scored by a model trained on it):
-  agent 91.7% accurate on the 84% it answers; customer 100% on the 80% it answers; overall 96.0% when answering, 78.3% counting
-  abstentions as misses. All three errors are female agents (AVT-007, 022, 030) whose only cue is a name unseen in training; the
-  model then falls back to the majority class (male) with high confidence.
-* **Outputs**: `data/gender_bilstm_predictions.jsonl` (labels, probabilities, evidence lines) and `data/gender_labels.csv` (one row
-  per call). Final labels on the 50 calls: agent 30 male / 18 female / 2 unknown; customer 34 male / 14 female / 2 unknown.
-* **Limitations**: 92 training examples is very small for a neural model. Unlike the rules, it guesses on 5 of the 7 agents whose
-  gender the transcript does not settle (mostly "male", the majority class), and its confidence is not calibrated.
-* **Baseline**: `gender.py` is a rule-based version (address terms, self-introductions, kin words, a name lexicon). It is kept for
-  comparison only (`rules_*` columns in the CSV). Its rules were developed on these same calls, so it has no out-of-sample figure.
+
+Generates:
+- `data/inputs.jsonl` — input fields only.
+- `data/gold.jsonl` — reference labels for evaluation.
+
+### Run inference
+
+```bash
+ASTER_MODEL=qwen/qwen3.8-27b \
+python run.py data/inputs.jsonl results/pred.jsonl \
+  --trace results/trace.jsonl \
+  --cache results/cache
+```
+
+### Evaluate predictions
+
+All 50 calls:
+
+```bash
+python eval.py results/pred.jsonl data/gold.jsonl
+```
+
+Held-out validation set (15 calls):
+
+```bash
+python eval.py results/pred.jsonl data/gold.jsonl data/val_ids.txt
+```
+
+Tuning set (35 calls):
+
+```bash
+python eval.py results/pred.jsonl data/gold.jsonl data/val_ids.txt --exclude
+```
+
+### Run offline tests
+
+```bash
+python -m pytest -q tests
+```
+
+The test suite contains 29 offline tests and does not require an API key.
+
+### Validation split
+
+`data/val_ids.txt` contains 15 calls whose IDs end in 3, 6 or 9.
+
+The split was fixed before tuning:
+- 35 calls for tuning.
+- 15 calls held out for validation.
+
+## 4. Model configuration
+
+### Provider and models
+
+Provider: Groq (OpenAI-compatible REST API).
+
+Final model:
+
+```text
+qwen/qwen3.8-27b
+```
+
+Set through `ASTER_MODEL`. The default model is specified in `llm.py`.
+
+Other evaluated models:
+- `openai/gpt-oss-120b`
+- `openai/gpt-oss-20b`
+
+### Inference parameters
+
+| Parameter | Setting |
+|---|---|
+| Temperature | 0 |
+| Top P | 1 |
+| Seed | 7 |
+| Maximum output tokens | 4,000 |
+| Response format | JSON object |
+| Qwen reasoning format | Hidden |
+| GPT-OSS reasoning effort | Low |
+
+GPT-OSS reasoning effort can be configured through `ASTER_REASONING_EFFORT`.
+
+### Reliability and error handling
+
+- HTTP timeout: 90 seconds per call.
+- Maximum attempts: 6.
+- Respects `retry-after` on HTTP 429/5xx responses.
+- Uses exponential backoff otherwise.
+- JSON parsing includes code-fence stripping and `{...}` salvage.
+
+If a record still fails after retries, the pipeline writes a conservative valid default:
+
+```text
+Disposition: Follow-up Required
+Sub-disposition: Further Discussion
+Lead Quality: Medium
+Next Call: Next day at 11:00
+```
+
+A warning is generated. Use `--strict` to raise an error instead of writing a fallback row.
+
+### Groq free-tier constraints
+
+Observed limits per model and organisation:
+
+| Limit | Value |
+|---|---:|
+| Tokens per minute | 8,000 |
+| Qwen input tokens per minute | 7,000 |
+| Requests per day | 1,000 |
+| Tokens per day | 200,000 |
+
+One complete 50-call run consumes approximately 190,000 tokens.
+
+Expect approximately 25 minutes for a full run when the daily quota is fresh.
+
+## 5. Architecture iteration history
+
+The pipeline evolved through three versions.
+
+| Version | Architecture | Token usage | Change |
+|---|---|---:|---|
+| v1 | Two sequential LLM passes | ~7,700/call | Replaced due to token consumption and free-tier limitations |
+| v2 | Single LLM pass | ~3,800/call | Consolidated extraction into one call |
+| v3 | Single LLM pass | ~3,800/call | Refined prompt wording based on error analysis |
+
+**Final implementation: v3.**
+
+The two-pass implementation is retained in `prompts_v1_two_pass.py` for reference.
+
+The final version reduces token consumption by approximately 50% compared with v1 while retaining the single-pass extraction architecture.
+
+See `ERROR_ANALYSIS.md` for the identified errors and prompt changes.
+
+---
+
+# Part 2: Speaker Gender Classification — BiLSTM
+
+## 1. Overview
+
+`gender_bilstm.py` classifies the gender of both speakers in each call:
+
+- Clinic agent
+- Customer
+
+It uses a hierarchical Bidirectional LSTM (BiLSTM) with attention, implemented from scratch in PyTorch.
+
+**Model constraints:**
+- No transformers.
+- No pretrained models.
+- No external LLM API calls.
+
+## 2. Setup and execution
+
+Create a virtual environment:
+
+```bash
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+```
+
+### Five-fold cross-validation
+
+```bash
+.venv/bin/python gender_bilstm.py cv
+```
+
+- Grouped by call to prevent speaker leakage between training and validation.
+- Approximately 10 minutes on CPU.
+
+### Train the final model
+
+```bash
+.venv/bin/python gender_bilstm.py train
+```
+
+Trains on all labelled speakers and saves:
+
+```text
+models/gender_bilstm.pt
+```
+
+Approximately 3 minutes on CPU.
+
+### Generate predictions
+
+```bash
+.venv/bin/python gender_bilstm.py predict \
+  data/inputs.jsonl \
+  data/gender_bilstm_predictions.jsonl
+```
+
+## 3. Data representation
+
+One training example represents a `(call, speaker)` pair.
+
+The model receives every line in the transcript associated with that speaker.
+
+Each line is tagged according to its relationship to the speaker:
+
+- `<by>` — words spoken by that speaker.
+- `<to>` — words spoken to that speaker.
+
+Examples:
+
+```text
+<by> I am Mehul
+<by> my wife
+<to> ma'am
+<to> Thank you, Mr. Kiran
+```
+
+A role token distinguishes the clinic agent from the customer.
+
+## 4. Model architecture
+
+The model uses a hierarchical BiLSTM with attention.
+
+```text
+Transcript Lines
+       |
+       v
+   Word Embeddings
+       |
+       v
+   BiLSTM (64 per direction)
+       |
+       v
+    Max Pooling
+       |
+       v
+  Attention Across Lines
+       |
+       v
+   Linear Classifier
+       |
+       v
+   Male / Female
+```
+
+### Training configuration
+
+| Parameter | Setting |
+|---|---|
+| Embedding dimension | 64 |
+| BiLSTM hidden size | 64 per direction |
+| Optimizer | Adam |
+| Learning rate | 2e-3 |
+| Epochs | 25 |
+| Dropout | 0.3 |
+| Augmentation | Random line dropout |
+| Ensemble | 3 seeds: 7, 8, 9 |
+
+The three models' predicted probabilities are averaged.
+
+The model returns `unknown` when its highest predicted probability is below 0.75.
+
+The most-attended transcript lines are also returned as evidence.
+
+## 5. Labels and reference data
+
+No ground-truth gender labels were supplied with the original dataset.
+
+`data/gender_reference.jsonl` contains manually assigned labels created by reading the transcripts.
+
+Usable reference dataset:
+- 92 speakers.
+- 49 customers.
+- 43 agents.
+- 7 undecidable agents excluded.
+- The two-customer call AVT-008 excluded.
+
+## 6. Cross-validation results
+
+Five-fold cross-validation is grouped by call. A call is never evaluated by a model trained on that same call.
+
+| Metric | Agent | Customer |
+|---|---:|---:|
+| Accuracy when answering | 91.7% | 100% |
+| Coverage | 84% | 80% |
+
+Overall:
+- Accuracy when answering: 96.0%.
+- Accuracy counting abstentions as misses: 78.3%.
+
+All three classification errors are female agents:
+
+- AVT-007
+- AVT-022
+- AVT-030
+
+In these cases, the only available cue is a name unseen during training. The model falls back to the majority class (male) with high confidence.
+
+## 7. Outputs
+
+The pipeline generates:
+
+| File | Contents |
+|---|---|
+| `data/gender_bilstm_predictions.jsonl` | Predictions, probabilities and evidence lines |
+| `data/gender_labels.csv` | One row per call with speaker labels |
+
+Final predictions across the 50 calls:
+
+| Speaker | Male | Female | Unknown |
+|---|---:|---:|---:|
+| Clinic agent | 30 | 18 | 2 |
+| Customer | 34 | 14 | 2 |
+
+## 8. Limitations
+
+The reference dataset contains only 92 usable training examples, which is very small for a neural network.
+
+Additional limitations:
+
+- The model sometimes predicts a gender even when the transcript does not provide sufficient evidence.
+- It guesses on 5 of the 7 undecidable agents, mostly predicting the majority class (male).
+- Confidence scores are not calibrated.
+- Unseen names can lead to confident but incorrect predictions.
+
+The `unknown` threshold provides an abstention mechanism, but does not eliminate these limitations.
+
+## 9. Rule-based baseline
+
+`gender.py` implements a rule-based alternative using:
+
+- Address terms.
+- Self-introductions.
+- Kinship words.
+- A name lexicon.
+
+It is retained for comparison only. Its results appear in the `rules_*` columns of the CSV.
+
+The rules were developed using the same 50 calls, so there is no out-of-sample performance figure for this baseline.
+
+---
+
+# Project Summary
+
+Aster Vale combines two different approaches to transcript analysis:
+
+| Component | Approach | Purpose |
+|---|---|---|
+| Transcript labeling | LLM + deterministic Python | Extract call outcomes and follow-up information |
+| Speaker gender | Hierarchical BiLSTM with attention | Classify the two speakers without pretrained models |
+
+The transcript-labeling pipeline prioritises consistent business-rule execution and efficient LLM usage.
+
+The gender-classification pipeline explores a lightweight neural sequence model, with explicit evaluation, abstention and documented limitations.
