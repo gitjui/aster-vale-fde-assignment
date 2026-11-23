@@ -1,5 +1,10 @@
 # Aster Vale — Transcript Labeling & Speaker Gender Classification
 
+> **Outputs (all 50 calls):**
+> - [`outputs/transcript_labels.csv`](outputs/transcript_labels.csv): `transcript_id, disposition, sub_disposition, lead_quality, next_call_at` (blank = no callback)
+> - [`outputs/gender_labels.csv`](outputs/gender_labels.csv): `transcript_id, agent_gender, agent_p_male, customer_gender, customer_p_male` (BiLSTM)
+> - Scorecard with metrics, heatmaps and the call-by-call tables: https://claude.ai/artifact/Wvvjr6nYjRUAahgArK6kdr
+
 ## Overview
 
 Aster Vale processes customer consultation transcripts and produces structured call labels using an LLM-based extraction pipeline and deterministic Python business logic.
